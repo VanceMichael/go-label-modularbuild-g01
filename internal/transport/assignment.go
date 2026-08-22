@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/VanceMichael/go-base-modularbuild-g01/internal/domain"
+	"github.com/VanceMichael/go-base-modularbuild-g01/internal/route"
 	"sort"
 	"sync"
 	"time"
@@ -24,6 +25,7 @@ type Assignment struct {
 	WeightKg     int64
 	Status       string
 	AssignedAt   time.Time
+	Segments     []route.Segment
 }
 type Planner struct {
 	mu          sync.RWMutex
@@ -74,6 +76,15 @@ func (p *Planner) Assign(ctx context.Context, a Assignment, at time.Time) error 
 	p.assignments[a.ID] = a
 	return nil
 }
+
+func (p *Planner) AssignPlanned(ctx context.Context, a Assignment, plan route.Plan, at time.Time) error {
+	if plan.ModuleMoveID != a.ModuleMoveID || len(plan.Segments) == 0 {
+		return domain.ErrInvalid
+	}
+	a.Segments = plan.AssignmentSegments()
+	return p.Assign(ctx, a, at)
+}
+
 func (p *Planner) Complete(id string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()

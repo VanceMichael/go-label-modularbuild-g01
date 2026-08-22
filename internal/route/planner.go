@@ -29,6 +29,9 @@ type Plan struct {
 	TotalMinutes int
 	TotalStops   int
 }
+
+func (p Plan) AssignmentSegments() []Segment { return p.Segments }
+
 type Planner struct {
 	hubs     map[string]Hub
 	segments []Segment
