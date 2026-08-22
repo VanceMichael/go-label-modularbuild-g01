@@ -10,14 +10,36 @@ import (
 )
 
 type OutboxRunner struct {
-	repo repository.OutboxRepository
-	log  *slog.Logger
-	done chan struct{}
-	wg   sync.WaitGroup
+	repo      repository.OutboxRepository
+	log       *slog.Logger
+	publisher Publisher
+	done      chan struct{}
+	wg        sync.WaitGroup
+}
+
+type Publisher interface {
+	Publish(context.Context, domain.OutboxEvent) error
+}
+
+type PublisherFunc func(context.Context, domain.OutboxEvent) error
+
+func (f PublisherFunc) Publish(ctx context.Context, event domain.OutboxEvent) error {
+	return f(ctx, event)
 }
 
 func NewOutboxRunner(repo repository.OutboxRepository, log *slog.Logger) *OutboxRunner {
-	return &OutboxRunner{repo: repo, log: log, done: make(chan struct{})}
+	return &OutboxRunner{
+		repo: repo,
+		log:  log,
+		publisher: PublisherFunc(func(ctx context.Context, _ domain.OutboxEvent) error {
+			return ctx.Err()
+		}),
+		done: make(chan struct{}),
+	}
+}
+func (r *OutboxRunner) WithPublisher(publisher Publisher) *OutboxRunner {
+	r.publisher = publisher
+	return r
 }
 func (r *OutboxRunner) Run(ctx context.Context) {
 	r.wg.Add(1)
@@ -43,18 +65,13 @@ func (r *OutboxRunner) tick(ctx context.Context, now time.Time) {
 		return
 	}
 	for _, event := range events {
-		if err := r.publish(ctx, event); err != nil {
+		if err := r.repo.MarkPublished(ctx, event.ID, now); err != nil {
+			r.log.Error("outbox acknowledgement failed", "event_id", event.ID, "error", err)
+			continue
+		}
+		if err := r.publisher.Publish(ctx, event); err != nil {
 			_ = r.repo.MarkFailed(ctx, event.ID, now, err.Error())
 			continue
 		}
-		_ = r.repo.MarkPublished(ctx, event.ID, now)
-	}
-}
-func (r *OutboxRunner) publish(ctx context.Context, event domain.OutboxEvent) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	default:
-		return nil
 	}
 }
