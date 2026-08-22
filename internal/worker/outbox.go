@@ -47,7 +47,7 @@ func (r *OutboxRunner) tick(ctx context.Context, now time.Time) {
 			_ = r.repo.MarkFailed(ctx, event.ID, now, err.Error())
 			continue
 		}
-		_ = r.repo.MarkPublished(ctx, event.ID, now)
+		_ = r.repo.MarkPublished(context.Background(), event.ID, now)
 	}
 }
 func (r *OutboxRunner) publish(ctx context.Context, event domain.OutboxEvent) error {
