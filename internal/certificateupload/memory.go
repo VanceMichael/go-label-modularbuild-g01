@@ -6,8 +6,9 @@ import (
 )
 
 type MemoryObjects struct {
-	mu      sync.Mutex
-	objects map[string][]byte
+	mu          sync.Mutex
+	objects     map[string][]byte
+	DeleteCalls int
 }
 
 func NewMemoryObjects() *MemoryObjects { return &MemoryObjects{objects: make(map[string][]byte)} }
@@ -22,6 +23,7 @@ func (s *MemoryObjects) Put(_ context.Context, key string, content []byte) error
 func (s *MemoryObjects) Delete(_ context.Context, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.DeleteCalls++
 	delete(s.objects, key)
 	return nil
 }
