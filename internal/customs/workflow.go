@@ -69,30 +69,35 @@ func (w *Workflow) AttachBatch(ctx context.Context, moduleMove string, documents
 	if len(documents) == 0 {
 		return domain.ErrInvalid
 	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	c, ok := w.cases[moduleMove]
 	if !ok {
 		return domain.ErrNotFound
 	}
+	// Validate the whole batch before mutating so a later invalid document
+	// leaves the case's existing documents untouched.
+	seen := make(map[string]struct{}, len(c.Documents)+len(documents))
+	for _, attached := range c.Documents {
+		seen[attached.Number] = struct{}{}
+	}
 	for _, document := range documents {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
 		if strings.TrimSpace(document.Number) == "" || document.ExpiresAt.Before(document.IssuedAt) {
 			return domain.ErrInvalid
 		}
-		for _, attached := range c.Documents {
-			if attached.Number == document.Number {
-				return domain.ErrConflict
-			}
+		if _, dup := seen[document.Number]; dup {
+			return domain.ErrConflict
 		}
-		c.Documents = append(c.Documents, document)
-		c.UpdatedAt = time.Now().UTC()
-		w.cases[moduleMove] = c
+		seen[document.Number] = struct{}{}
 	}
+	c.Documents = append(c.Documents, documents...)
+	c.UpdatedAt = time.Now().UTC()
+	w.cases[moduleMove] = c
 	return nil
 }
 func (w *Workflow) Review(_ context.Context, module_move, actor string, now time.Time) (Case, error) {
