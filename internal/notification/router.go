@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/VanceMichael/go-base-modularbuild-g01/internal/domain"
+	"github.com/VanceMichael/go-base-modularbuild-g01/internal/workerpool"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,11 @@ type Message struct {
 type Sender interface {
 	Send(context.Context, Message) error
 }
+type DeliveryResult struct {
+	MessageID string
+	Error     string
+}
+
 type MemorySender struct {
 	mu       sync.Mutex
 	Sent     []Message
@@ -65,4 +71,24 @@ func (r *Router) Deliver(ctx context.Context, v Message) error {
 		return domain.ErrNotFound
 	}
 	return s.Send(ctx, v)
+}
+
+func (r *Router) DeliverBatch(ctx context.Context, workers int, messages []Message) []DeliveryResult {
+	jobs := make([]workerpool.Job, 0, len(messages))
+	for _, message := range messages {
+		message := message
+		jobs = append(jobs, func(jobCtx context.Context) error {
+			return r.Deliver(jobCtx, message)
+		})
+	}
+	completed := workerpool.Run(ctx, workers, jobs)
+	results := make([]DeliveryResult, 0, len(completed))
+	for _, result := range completed {
+		item := DeliveryResult{MessageID: messages[result.Index].ID}
+		if result.Err != nil {
+			item.Error = result.Err.Error()
+		}
+		results = append(results, item)
+	}
+	return results
 }
