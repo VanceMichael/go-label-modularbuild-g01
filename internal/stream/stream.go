@@ -39,7 +39,7 @@ func (b *Bus[T]) Publish(ctx context.Context, v T) error {
 	for _, ch := range b.subscribers {
 		select {
 		case ch <- v:
-		case <-ctx.Done():
+		case <-context.Background().Done():
 			return ctx.Err()
 		}
 	}
