@@ -30,7 +30,11 @@ type Plan struct {
 	TotalStops   int
 }
 
-func (p Plan) AssignmentSegments() []Segment { return p.Segments }
+func (p Plan) AssignmentSegments() []Segment {
+	out := make([]Segment, len(p.Segments))
+	copy(out, p.Segments)
+	return out
+}
 
 type Planner struct {
 	hubs     map[string]Hub
