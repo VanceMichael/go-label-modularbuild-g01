@@ -36,12 +36,21 @@ func (s *Service) prepare(ctx context.Context, pack Package) (Pending, error) {
 	if err != nil {
 		return nil, fmt.Errorf("acquire package encoder: %w", err)
 	}
-	defer s.pool.Release(buffer)
 
 	if err := json.NewEncoder(buffer).Encode(pack); err != nil {
+		s.pool.Release(buffer)
 		return nil, fmt.Errorf("encode lift package: %w", err)
 	}
-	pending, err := s.signer.Start(ctx, pack.PlanID, buffer.Bytes())
+
+	// Copy the encoded payload before returning the buffer to the pool. The
+	// signer may consume the bytes asynchronously after this method returns,
+	// and buffer.Bytes() aliases the pooled buffer's internal storage. Holding
+	// that slice while the buffer is released would let a concurrent encode
+	// overwrite the payload mid-sign, producing a signature over the wrong data.
+	payload := append([]byte(nil), buffer.Bytes()...)
+	s.pool.Release(buffer)
+
+	pending, err := s.signer.Start(ctx, pack.PlanID, payload)
 	if err != nil {
 		return nil, fmt.Errorf("start package signature: %w", err)
 	}
