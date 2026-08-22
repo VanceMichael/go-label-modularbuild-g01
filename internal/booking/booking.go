@@ -64,9 +64,14 @@ func (l *Ledger) Reserve(ctx context.Context, r Request) (Allocation, error) {
 	if l.reserved[r.LegID]+r.WeightKg > l.capacity[r.LegID] {
 		return Allocation{Request: r, Reason: "capacity", CreatedAt: time.Now().UTC()}, domain.ErrCapacity
 	}
+	l.reserved[r.LegID] += r.WeightKg
+	select {
+	case <-ctx.Done():
+		return Allocation{}, ctx.Err()
+	default:
+	}
 	id := fmt.Sprintf("%s-%d", r.ModuleMoveID, time.Now().UnixNano())
 	a := Allocation{ID: id, Request: r, Accepted: true, CreatedAt: time.Now().UTC()}
-	l.reserved[r.LegID] += r.WeightKg
 	l.allocations[id] = a
 	return a, nil
 }
