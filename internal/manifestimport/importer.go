@@ -16,7 +16,7 @@ func NewImporter(source Source, store Store) *Importer {
 	return &Importer{source: source, store: store}
 }
 
-func (i *Importer) Import(ctx context.Context, tenantID, fileID string) error {
+func (i *Importer) Import(ctx context.Context, tenantID, fileID string) (err error) {
 	if i.source == nil || i.store == nil || tenantID == "" || fileID == "" {
 		return domain.ErrInvalid
 	}
@@ -24,6 +24,14 @@ func (i *Importer) Import(ctx context.Context, tenantID, fileID string) error {
 	if err != nil {
 		return fmt.Errorf("open manifest source: %w", err)
 	}
+	// Always close the source once opened so the open count is restored even
+	// when the transaction fails partway through (e.g. a read fault on a
+	// later row). A transaction error takes precedence over a close error.
+	defer func() {
+		if cerr := stream.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("close manifest source: %w", cerr)
+		}
+	}()
 	err = i.store.Transaction(ctx, func(tx Tx) error {
 		for {
 			row, readErr := stream.Next(ctx)
@@ -41,11 +49,5 @@ func (i *Importer) Import(ctx context.Context, tenantID, fileID string) error {
 			}
 		}
 	})
-	if err != nil {
-		return err
-	}
-	if err := stream.Close(); err != nil {
-		return fmt.Errorf("close manifest source: %w", err)
-	}
-	return nil
+	return err
 }
