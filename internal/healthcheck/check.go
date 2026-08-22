@@ -18,6 +18,12 @@ type Result struct {
 	Error   string
 }
 
+func probeContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	detached := context.WithoutCancel(parent)
+	child, cancel := context.WithTimeout(detached, timeout)
+	return child, cancel
+}
+
 func Execute(ctx context.Context, p Probe) Result {
 	start := time.Now()
 	r := Result{Name: p.Name}
@@ -25,7 +31,7 @@ func Execute(ctx context.Context, p Probe) Result {
 		r.Error = domain.ErrInvalid.Error()
 		return r
 	}
-	child, cancel := context.WithTimeout(ctx, p.Timeout)
+	child, cancel := probeContext(ctx, p.Timeout)
 	defer cancel()
 	if err := p.Run(child); err != nil {
 		r.Error = err.Error()
