@@ -65,6 +65,36 @@ func (w *Workflow) Attach(_ context.Context, module_move string, d Document) err
 	w.cases[module_move] = c
 	return nil
 }
+func (w *Workflow) AttachBatch(ctx context.Context, moduleMove string, documents []Document) error {
+	if len(documents) == 0 {
+		return domain.ErrInvalid
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	c, ok := w.cases[moduleMove]
+	if !ok {
+		return domain.ErrNotFound
+	}
+	for _, document := range documents {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+		if strings.TrimSpace(document.Number) == "" || document.ExpiresAt.Before(document.IssuedAt) {
+			return domain.ErrInvalid
+		}
+		for _, attached := range c.Documents {
+			if attached.Number == document.Number {
+				return domain.ErrConflict
+			}
+		}
+		c.Documents = append(c.Documents, document)
+		c.UpdatedAt = time.Now().UTC()
+		w.cases[moduleMove] = c
+	}
+	return nil
+}
 func (w *Workflow) Review(_ context.Context, module_move, actor string, now time.Time) (Case, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
