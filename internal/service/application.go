@@ -216,6 +216,28 @@ func (a *Application) OpenLeg(ctx context.Context, u domain.User, id string) (do
 	return l, nil
 }
 
+func (a *Application) CloseLeg(ctx context.Context, u domain.User, id string) (domain.LiftWindow, error) {
+	if u.Role != domain.RoleSitePlanner {
+		return domain.LiftWindow{}, domain.ErrForbidden
+	}
+	window, err := a.store.GetLeg(ctx, u.TenantID, id)
+	if err != nil {
+		return domain.LiftWindow{}, err
+	}
+	if window.Status != domain.WindowOpen {
+		return domain.LiftWindow{}, domain.ErrState
+	}
+	if window.ReservedKg > 0 {
+		return domain.LiftWindow{}, errors.New(domain.ErrState.Error())
+	}
+	if err := a.store.UpdateWindowStatus(ctx, u.TenantID, id, domain.WindowClosed, window.Version); err != nil {
+		return domain.LiftWindow{}, err
+	}
+	window.Status = domain.WindowClosed
+	window.Version++
+	return window, nil
+}
+
 func (a *Application) PutQuality(ctx context.Context, u domain.User, c domain.QualityCase) (domain.QualityCase, error) {
 	if u.Role != domain.RoleSitePlanner {
 		return domain.QualityCase{}, domain.ErrForbidden

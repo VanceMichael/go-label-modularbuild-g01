@@ -35,6 +35,7 @@ func New(app *service.Application, log *slog.Logger) http.Handler {
 	r.With(s.auth).Post("/v1/module_moves/{id}/transition", s.transitionModuleMove)
 	r.With(s.auth).Post("/v1/flight-windows", s.createLeg)
 	r.With(s.auth).Post("/v1/flight-windows/{id}/open", s.openLeg)
+	r.With(s.auth).Post("/v1/flight-windows/{id}/close", s.closeLeg)
 	r.With(s.auth).Post("/v1/quality/{module_moveID}", s.quality)
 	r.With(s.auth).Post("/v1/site_safety/{module_moveID}", s.site_safety)
 	r.With(s.auth).Get("/v1/operations/summary", s.summary)
@@ -158,6 +159,15 @@ func (s *Server) createLeg(w http.ResponseWriter, r *http.Request) {
 func (s *Server) openLeg(w http.ResponseWriter, r *http.Request) {
 	u := mustUser(r)
 	v, err := s.app.OpenLeg(r.Context(), u, chi.URLParam(r, "id"))
+	if err != nil {
+		fail(w, status(err), err)
+		return
+	}
+	write(w, 200, v)
+}
+func (s *Server) closeLeg(w http.ResponseWriter, r *http.Request) {
+	u := mustUser(r)
+	v, err := s.app.CloseLeg(r.Context(), u, chi.URLParam(r, "id"))
 	if err != nil {
 		fail(w, status(err), err)
 		return
