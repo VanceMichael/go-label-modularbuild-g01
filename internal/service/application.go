@@ -151,7 +151,7 @@ func (a *Application) BookModuleMove(ctx context.Context, u domain.User, id, win
 	if s.Origin != window.Origin || s.Destination != window.Destination {
 		return domain.ModuleMove{}, domain.ErrInvalid
 	}
-	booked, err := a.store.BookModuleMove(ctx, u.TenantID, id, windowID, s.Version, window.Version, a.clock.Now())
+	booked, err := a.store.BookModuleMove(context.Background(), u.TenantID, id, windowID, s.Version, window.Version, a.clock.Now())
 	if err != nil {
 		return domain.ModuleMove{}, fmt.Errorf("book module_move: %w", err)
 	}
