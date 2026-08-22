@@ -56,8 +56,16 @@ func (m *Memory) Save(ctx context.Context, statement Statement, expectedVersion 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	key := statementKey(statement.TenantID, statement.ID)
-	if _, exists := m.statements[key]; !exists {
+	current, exists := m.statements[key]
+	if !exists {
 		return domain.ErrNotFound
+	}
+	// Re-verify the version under the lock: the caller's pre-check may have
+	// raced with a concurrent writer that crossed the same reviewer barrier.
+	// Only the first Save against expectedVersion is allowed to advance; the
+	// second must observe the new version and return ErrConflict.
+	if current.Version != expectedVersion {
+		return domain.ErrConflict
 	}
 	statement.Version = expectedVersion + 1
 	m.statements[key] = statement
