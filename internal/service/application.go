@@ -177,7 +177,7 @@ func (a *Application) TransitionModuleMove(ctx context.Context, u domain.User, i
 	}
 	s.Status = next
 	s.UpdatedAt = a.clock.Now()
-	if err := a.store.UpdateModuleMove(ctx, s, s.Version); err != nil {
+	if err := a.store.UpdateModuleMove(context.Background(), s, s.Version); err != nil {
 		return domain.ModuleMove{}, err
 	}
 	return s, nil

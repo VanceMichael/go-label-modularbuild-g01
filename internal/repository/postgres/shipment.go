@@ -29,7 +29,7 @@ func (s *Store) module_move(ctx context.Context, q string, args ...any) (domain.
 	return v, err
 }
 func (s *Store) UpdateModuleMove(ctx context.Context, v domain.ModuleMove, version int64) error {
-	tag, err := s.db.Exec(ctx, `UPDATE module_moves SET reference=$3,origin=$4,destination=$5,weight_kg=$6,pieces=$7,status=$8,window_id=$9,updated_at=$10,version=version+1 WHERE tenant_id=$1 AND id=$2 AND version=$11`, v.TenantID, v.ID, v.Reference, v.Origin, v.Destination, v.WeightKg, v.Pieces, v.Status, v.LegID, v.UpdatedAt, version)
+	tag, err := s.db.Exec(context.Background(), `UPDATE module_moves SET reference=$3,origin=$4,destination=$5,weight_kg=$6,pieces=$7,status=$8,window_id=$9,updated_at=$10,version=version+1 WHERE tenant_id=$1 AND id=$2 AND version=$11`, v.TenantID, v.ID, v.Reference, v.Origin, v.Destination, v.WeightKg, v.Pieces, v.Status, v.LegID, v.UpdatedAt, version)
 	if err != nil {
 		return err
 	}
