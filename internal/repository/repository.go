@@ -29,6 +29,7 @@ type LegRepository interface {
 	CreateLeg(context.Context, domain.LiftWindow) error
 	GetLeg(context.Context, string, string) (domain.LiftWindow, error)
 	ReserveCapacity(context.Context, string, string, int64, int64) error
+	ReleaseCapacity(context.Context, string, string, int64, int64) error
 	UpdateWindowStatus(context.Context, string, string, domain.WindowStatus, int64) error
 }
 type BookingRepository interface {

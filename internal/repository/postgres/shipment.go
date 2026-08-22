@@ -88,6 +88,16 @@ func (s *Store) ReserveCapacity(ctx context.Context, tenant, id string, weight, 
 	}
 	return nil
 }
+func (s *Store) ReleaseCapacity(ctx context.Context, tenant, id string, weight, version int64) error {
+	tag, err := s.db.Exec(ctx, `UPDATE lift_windows SET reserved_kg=reserved_kg-$4,version=version-1 WHERE tenant_id=$1 AND id=$2 AND version=$3 AND reserved_kg>=$4`, tenant, id, version, weight)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrConflict
+	}
+	return nil
+}
 func (s *Store) UpdateWindowStatus(ctx context.Context, tenant, id string, status domain.WindowStatus, version int64) error {
 	tag, err := s.db.Exec(ctx, `UPDATE lift_windows SET status=$4,version=version+1 WHERE tenant_id=$1 AND id=$2 AND version=$3`, tenant, id, version, status)
 	if err != nil {

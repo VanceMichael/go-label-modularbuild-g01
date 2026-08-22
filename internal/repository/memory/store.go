@@ -218,6 +218,24 @@ func (s *Store) ReserveCapacity(_ context.Context, tenant, id string, weight, ve
 	s.windows[id] = v
 	return nil
 }
+func (s *Store) ReleaseCapacity(_ context.Context, tenant, id string, weight, version int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	v, ok := s.windows[id]
+	if !ok || v.TenantID != tenant {
+		return domain.ErrNotFound
+	}
+	if v.Version != version {
+		return domain.ErrConflict
+	}
+	if weight <= 0 || weight > v.ReservedKg {
+		return domain.ErrInvalid
+	}
+	v.ReservedKg -= weight
+	v.Version--
+	s.windows[id] = v
+	return nil
+}
 func (s *Store) UpdateWindowStatus(_ context.Context, tenant, id string, status domain.WindowStatus, version int64) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

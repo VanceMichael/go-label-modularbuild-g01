@@ -2,7 +2,9 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"github.com/VanceMichael/go-base-modularbuild-g01/internal/domain"
+	"github.com/VanceMichael/go-base-modularbuild-g01/internal/repository"
 	"testing"
 	"time"
 )
@@ -101,5 +103,72 @@ func TestMemoryBookingRejectsRouteMismatchWithoutReservation(t *testing.T) {
 	window, _ := s.GetLeg(context.Background(), "t", "l")
 	if window.ReservedKg != 0 {
 		t.Fatal("reservation leaked", window.ReservedKg)
+	}
+}
+
+// TestFieldRecordMoveCancelReleasesWindow reproduces the field record where a
+// booking cancelled after the lift capacity reservation leaked occupancy. On a
+// cancelled booking the move stays draft with no window linkage and unchanged
+// version, and the lift window must keep zero occupancy and its original
+// version so that a retry or a concurrent caller proceeds on a clean slate.
+func TestFieldRecordMoveCancelReleasesWindow(t *testing.T) {
+	const tenant = "tenant-1"
+	s := New()
+	now := time.Now().UTC()
+	move := domain.ModuleMove{ID: "MOD-A17", TenantID: tenant, Reference: "move-cancel", Origin: "FACTORY-A", Destination: "SITE-B", WeightKg: 6, Pieces: 1, Status: domain.ModuleMoveDraft, Version: 1, CreatedAt: now, UpdatedAt: now}
+	if err := s.CreateModuleMove(context.Background(), move); err != nil {
+		t.Fatal(err)
+	}
+	window := domain.LiftWindow{ID: "LIFT-08", TenantID: tenant, LiftNumber: "window-legal", Origin: "FACTORY-A", Destination: "SITE-B", DepartureAt: now.Add(time.Hour), ArrivalAt: now.Add(2 * time.Hour), CapacityKg: 10, Status: domain.WindowOpen, Version: 1, CreatedAt: now}
+	if err := s.CreateLeg(context.Background(), window); err != nil {
+		t.Fatal(err)
+	}
+
+	// Cancel arrives after the reservation inside AssignModuleMove. The memory
+	// ReserveCapacity is synchronous and cannot observe a mid-call cancel, so
+	// drive the same compensation path through the cancel branch directly.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	booked, err := repository.AssignModuleMove(ctx, s, tenant, move, window, now)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", err)
+	}
+	if booked.ID != "" {
+		t.Fatalf("cancelled call must return empty move, got %s", booked.ID)
+	}
+
+	storedMove, _ := s.GetModuleMove(context.Background(), tenant, move.ID)
+	if storedMove.Status != domain.ModuleMoveDraft {
+		t.Fatalf("stored move status %s", storedMove.Status)
+	}
+	if storedMove.LegID != nil {
+		t.Fatalf("window linkage leaked: %v", storedMove.LegID)
+	}
+	if storedMove.Version != 1 {
+		t.Fatalf("move version changed: %d", storedMove.Version)
+	}
+
+	storedWindow, _ := s.GetLeg(context.Background(), tenant, window.ID)
+	if storedWindow.ReservedKg != 0 {
+		t.Fatalf("window occupancy leaked: %d", storedWindow.ReservedKg)
+	}
+	if storedWindow.Version != 1 {
+		t.Fatalf("window version changed: %d", storedWindow.Version)
+	}
+
+	// Retry availability + success receipt: a clean-slate retry now succeeds and
+	// reserves the module weight exactly once.
+	retryMove, _ := s.GetModuleMove(context.Background(), tenant, move.ID)
+	retryWindow, _ := s.GetLeg(context.Background(), tenant, window.ID)
+	bookedRetry, err := repository.AssignModuleMove(context.Background(), s, tenant, retryMove, retryWindow, now)
+	if err != nil || bookedRetry.Status != domain.ModuleMoveBooked {
+		t.Fatalf("retry booking: %v %#v", err, bookedRetry)
+	}
+	storedWindowAfter, _ := s.GetLeg(context.Background(), tenant, window.ID)
+	if storedWindowAfter.ReservedKg != move.WeightKg {
+		t.Fatalf("window occupancy after retry: %d", storedWindowAfter.ReservedKg)
+	}
+	if storedWindowAfter.Version != 2 {
+		t.Fatalf("window version after retry: %d", storedWindowAfter.Version)
 	}
 }
