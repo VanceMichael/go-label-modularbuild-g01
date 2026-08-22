@@ -27,7 +27,8 @@ func (s *Service) Approve(ctx context.Context, tenantID, permitID, actorID strin
 	if s.store == nil || s.cache == nil || s.now == nil || tenantID == "" || permitID == "" || actorID == "" {
 		return domain.ErrInvalid
 	}
-	return s.store.Transaction(ctx, func(tx Tx) error {
+	var approved Permit
+	if err := s.store.Transaction(ctx, func(tx Tx) error {
 		permit, err := tx.GetPermit(ctx, tenantID, permitID)
 		if err != nil {
 			return fmt.Errorf("load permit: %w", err)
@@ -43,9 +44,6 @@ func (s *Service) Approve(ctx context.Context, tenantID, permitID, actorID strin
 		if err := tx.SavePermit(ctx, permit); err != nil {
 			return fmt.Errorf("save permit: %w", err)
 		}
-		if err := s.cache.Put(ctx, permit); err != nil {
-			return fmt.Errorf("publish permit readiness: %w", err)
-		}
 		if err := tx.AppendAudit(ctx, AuditEvent{
 			PermitID: permit.ID,
 			TenantID: permit.TenantID,
@@ -55,8 +53,17 @@ func (s *Service) Approve(ctx context.Context, tenantID, permitID, actorID strin
 		}); err != nil {
 			return fmt.Errorf("append permit audit: %w", err)
 		}
+		approved = permit
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	// Publish readiness only after the transaction commits so an audit
+	// failure rolls the permit back without leaving a stale cached record.
+	if err := s.cache.Put(ctx, approved); err != nil {
+		return fmt.Errorf("publish permit readiness: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) CanDispatch(ctx context.Context, tenantID, permitID string) (bool, error) {
