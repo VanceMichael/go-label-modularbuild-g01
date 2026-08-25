@@ -1,0 +1,39 @@
+# BENZHI_README
+
+这是一个面向预制建筑模块运输与现场安装的运营管理系统，用于协调模块流转、吊装窗口、质量放行、现场安全审批和安装记录。
+
+## 项目说明
+
+- 项目：VanceMichael/go-label-modularbuild-g01
+- 项目用途：ModularBuild coordinates prefabricated building modules from the assembly partner to the construction site. A fabricator registers a module movement, a site planner assigns it to a time-bounded lift window, quality staff release the module, and the installation crew records site-safety clearance before lifting and installation. The workflow connects planning, transport capacity, quality evidence, safety approval, installation events, audit history, and durable outbox delivery.
+- Go 工具链：`golang:1.22`
+- 前端工具链：无
+
+## 标准构建、运行和测试命令
+
+进入容器后执行：
+
+```bash
+# 编译
+cd '/app' && GOTOOLCHAIN=local go build ./...
+
+# 启动
+cd '/app' && GOTOOLCHAIN=local go run ./cmd/server
+
+# 测试
+cd '/app' && GOTOOLCHAIN=local go test ./...
+```
+
+## Docker 构建和进入容器
+
+```bash
+chmod +x build_benzhi_docker.sh
+./build_benzhi_docker.sh benzhi-task-74-amd64 linux/amd64
+./build_benzhi_docker.sh benzhi-task-74-arm64 linux/arm64
+docker run -it benzhi-task-74-amd64:latest
+docker run -it --platform linux/arm64 benzhi-task-74-arm64:latest
+```
+
+## 题目验证命令
+
+1. 预期退出码 1：`go test ./internal/installationreceipt -run '^TestArchiveFailureDoesNotCompleteInstallation$' -count=1`
