@@ -9,6 +9,12 @@ import (
 	"time"
 )
 
+// hookAfterReserve, when non-nil, is invoked after a reservation's capacity
+// is deducted but before the in-flight cancellation check and the allocation
+// save. It exists only so tests can deterministically reproduce a
+// cancellation arriving in that window; it is always nil in production.
+var hookAfterReserve func()
+
 type Request struct {
 	TenantID     string
 	ModuleMoveID string
@@ -65,8 +71,15 @@ func (l *Ledger) Reserve(ctx context.Context, r Request) (Allocation, error) {
 		return Allocation{Request: r, Reason: "capacity", CreatedAt: time.Now().UTC()}, domain.ErrCapacity
 	}
 	l.reserved[r.LegID] += r.WeightKg
+	if hookAfterReserve != nil {
+		hookAfterReserve()
+	}
 	select {
 	case <-ctx.Done():
+		// Cancellation landed after the entry check but before the
+		// allocation was saved: undo the reservation so the leg stays
+		// fully available and the tenant list stays empty.
+		l.reserved[r.LegID] -= r.WeightKg
 		return Allocation{}, ctx.Err()
 	default:
 	}
