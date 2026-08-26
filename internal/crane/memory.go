@@ -50,6 +50,14 @@ func (m *Memory) SaveReservation(_ context.Context, reservation Reservation) err
 	if !exists || crane.TenantID != reservation.TenantID {
 		return domain.ErrNotFound
 	}
+	// Enforce the capacity invariant atomically with the reservation write so
+	// that concurrent reservations on the same crane are serialized under a
+	// single lock: at most one of two competing requests that both fit at the
+	// observed snapshot can succeed; the other observes the incremented
+	// ReservedKg and is rejected without persisting a reservation.
+	if crane.ReservedKg+reservation.WeightKg > crane.CapacityKg {
+		return domain.ErrCapacity
+	}
 	crane.ReservedKg += reservation.WeightKg
 	m.cranes[crane.ID] = crane
 	m.reservations[reservation.ID] = reservation
